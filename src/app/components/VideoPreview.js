@@ -97,14 +97,14 @@ export default function VideoPreview({ video }) {
         </div>
 
         {/* Transcript Preview */}
-        {video.transcript && (
+        {video.transcript && Array.isArray(video.transcript) && (
           <div className="bg-gray-50 rounded-lg p-4">
             <h4 className="font-medium text-gray-900 mb-2">Transcript Preview</h4>
             <div className="max-h-32 overflow-y-auto text-sm text-gray-600">
               {video.transcript.slice(0, 3).map((entry, index) => (
                 <div key={index} className="mb-2">
                   <span className="text-gray-500 text-xs">
-                    [{formatDuration(entry.start)} - {formatDuration(entry.end)}]
+                    [{formatDuration(entry.start || (entry.offset ?? 0) / 1000)} - {formatDuration(entry.end || ((entry.offset ?? 0) + (entry.duration ?? 0)) / 1000)}]
                   </span>
                   <span className="ml-2">{entry.text}</span>
                 </div>

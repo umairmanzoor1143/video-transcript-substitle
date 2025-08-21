@@ -9,6 +9,8 @@ import ProcessingStatus from './components/ProcessingStatus';
 export default function Home() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [videoLink, setVideoLink] = useState('');
+  const [transcript, setTranscript] = useState(null);
+  const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [processedVideo, setProcessedVideo] = useState(null);
@@ -17,8 +19,31 @@ export default function Home() {
   const handleFileUpload = (file) => {
     setUploadedFile(file);
     setVideoLink('');
+    setTranscript(null);
     setProcessedVideo(null);
     setError('');
+  };
+
+  const fetchTranscriptForLink = async (link) => {
+    try {
+      setIsFetchingTranscript(true);
+      setTranscript(null);
+      setError('');
+      const resp = await fetch('/api/youtube-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoLink: link })
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || 'Failed to fetch transcript');
+      }
+      setTranscript(data.transcript);
+    } catch (e) {
+      setError(e.message || 'Failed to fetch transcript');
+    } finally {
+      setIsFetchingTranscript(false);
+    }
   };
 
   const handleLinkSubmit = (link) => {
@@ -26,6 +51,11 @@ export default function Home() {
     setUploadedFile(null);
     setProcessedVideo(null);
     setError('');
+    if (link) {
+      fetchTranscriptForLink(link);
+    } else {
+      setTranscript(null);
+    }
   };
 
   const handleProcess = async () => {
@@ -44,21 +74,23 @@ export default function Home() {
         formData.append('video', uploadedFile);
       } else if (videoLink) {
         formData.append('videoLink', videoLink);
+        if (transcript) {
+          formData.append('transcript', JSON.stringify(transcript));
+        }
       }
 
-      setProcessingStep('Uploading video...');
-      
+      setProcessingStep('Downloading video...');
       const response = await fetch('/api/process-video', {
         method: 'POST',
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to process video');
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to process video');
       }
 
-      const result = await response.json();
-      setProcessedVideo(result);
+      setProcessedVideo(result.video);
       setProcessingStep('Processing complete!');
     } catch (err) {
       setError(err.message || 'An error occurred during processing');
@@ -90,8 +122,45 @@ export default function Home() {
             <VideoUploader onFileUpload={handleFileUpload} uploadedFile={uploadedFile} />
             <div className="text-center text-gray-500">- OR -</div>
             <VideoLinkInput onSubmit={handleLinkSubmit} videoLink={videoLink} />
-            
-            {canProcess && (
+
+            {/* Transcript Panel for YouTube links */}
+            {videoLink && (
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Transcript</h3>
+                  {isFetchingTranscript && (
+                    <span className="text-sm text-blue-600">Fetching...</span>
+                  )}
+                </div>
+                {transcript ? (
+                  <div className="max-h-48 overflow-y-auto text-sm text-gray-700 space-y-2">
+                    {transcript.slice(0, 50).map((t, i) => (
+                      <div key={i} className="flex items-start">
+                        <span className="text-gray-500 text-xs w-24 shrink-0">
+                          {Math.floor(t.start / 60)}:{Math.floor(t.start % 60).toString().padStart(2, '0')} - {Math.floor(t.end / 60)}:{Math.floor(t.end % 60).toString().padStart(2, '0')}
+                        </span>
+                        <span className="ml-2">{t.text}</span>
+                      </div>
+                    ))}
+                    {transcript.length > 50 && (
+                      <p className="text-gray-500 text-xs italic">... and more</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">{isFetchingTranscript ? 'Please wait...' : 'No transcript available yet.'}</p>
+                )}
+
+                <button
+                  disabled={!transcript || isProcessing}
+                  onClick={handleProcess}
+                  className={`mt-4 w-full ${!transcript || isProcessing ? 'bg-gray-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'} text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200`}
+                >
+                  Burn subtitles into video
+                </button>
+              </div>
+            )}
+
+            {canProcess && !videoLink && (
               <button
                 onClick={handleProcess}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
@@ -106,7 +175,6 @@ export default function Home() {
             {isProcessing && (
               <ProcessingStatus step={processingStep} />
             )}
-            
             {processedVideo && (
               <VideoPreview video={processedVideo} />
             )}
