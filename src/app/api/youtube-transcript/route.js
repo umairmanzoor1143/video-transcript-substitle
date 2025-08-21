@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { YoutubeTranscript } from 'youtube-transcript';
 
+export const runtime = 'nodejs';
+
 function extractYouTubeId(url) {
   const regex = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^&\n?#]+)/;
   const match = url.match(regex);

@@ -8,6 +8,8 @@ import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
 import ytdl from 'ytdl-core';
 
+export const runtime = 'nodejs';
+
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -94,8 +96,18 @@ async function fetchYouTubeTranscript(youtubeId) {
   return normalizeTranscript(raw);
 }
 
-async function downloadYouTubeVideo(videoUrl, destPath) {
-  const readable = ytdl(videoUrl, { filter: 'audioandvideo', quality: 'highest' });
+async function downloadYouTubeVideoById(youtubeId, destPath) {
+  const url = `https://www.youtube.com/watch?v=${youtubeId}`;
+  const readable = ytdl(url, {
+    filter: 'audioandvideo',
+    quality: 'highest',
+    requestOptions: {
+      headers: {
+        'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'accept-language': 'en-US,en;q=0.9'
+      }
+    }
+  });
   const writable = createWriteStream(destPath);
   await pipeline(readable, writable);
 }
@@ -125,9 +137,9 @@ export async function POST(request) {
       // Use provided transcript if present, otherwise fetch quickly
       transcript = providedTranscript ? normalizeTranscript(JSON.parse(String(providedTranscript))) : await fetchYouTubeTranscript(youtubeId);
 
-      // Download the YouTube video fast
+      // Download the YouTube video using normalized watch URL
       videoPath = join(uploadsDir, `yt_${youtubeId}_${Date.now()}.mp4`);
-      await downloadYouTubeVideo(String(videoLink), videoPath);
+      await downloadYouTubeVideoById(youtubeId, videoPath);
     } else {
       const file = formData.get('video');
       if (file && typeof file === 'object' && 'arrayBuffer' in file) {
