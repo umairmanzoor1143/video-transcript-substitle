@@ -5,6 +5,7 @@ import VideoUploader from './components/VideoUploader';
 import VideoLinkInput from './components/VideoLinkInput';
 import VideoPreview from './components/VideoPreview';
 import ProcessingStatus from './components/ProcessingStatus';
+import TranscriptDisplay from './components/TranscriptDisplay';
 
 export default function Home() {
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -12,12 +13,14 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStep, setProcessingStep] = useState('');
   const [processedVideo, setProcessedVideo] = useState(null);
+  const [youtubeTranscript, setYoutubeTranscript] = useState(null);
   const [error, setError] = useState('');
 
   const handleFileUpload = (file) => {
     setUploadedFile(file);
     setVideoLink('');
     setProcessedVideo(null);
+    setYoutubeTranscript(null);
     setError('');
   };
 
@@ -25,6 +28,7 @@ export default function Home() {
     setVideoLink(link);
     setUploadedFile(null);
     setProcessedVideo(null);
+    setYoutubeTranscript(null);
     setError('');
   };
 
@@ -39,32 +43,97 @@ export default function Home() {
     setError('');
 
     try {
-      const formData = new FormData();
       if (uploadedFile) {
-        formData.append('video', uploadedFile);
+        // Process local video file - fast processing
+        await processLocalVideo(uploadedFile);
       } else if (videoLink) {
-        formData.append('videoLink', videoLink);
+        // Process YouTube link - fast transcript extraction
+        await processYouTubeLink(videoLink);
       }
-
-      setProcessingStep('Uploading video...');
-      
-      const response = await fetch('/api/process-video', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process video');
-      }
-
-      const result = await response.json();
-      setProcessedVideo(result);
-      setProcessingStep('Processing complete!');
     } catch (err) {
       setError(err.message || 'An error occurred during processing');
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const processLocalVideo = async (file) => {
+    setProcessingStep('Processing local video...');
+    
+    const formData = new FormData();
+    formData.append('video', file);
+    
+    const response = await fetch('/api/process-local-video', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to process local video');
+    }
+
+    const result = await response.json();
+    setProcessedVideo(result.video);
+    setProcessingStep('Local video processing complete!');
+  };
+
+  const processYouTubeLink = async (link) => {
+    setProcessingStep('Extracting YouTube transcript...');
+    
+    const formData = new FormData();
+    formData.append('videoLink', link);
+    
+    const response = await fetch('/api/process-video', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to process YouTube link');
+    }
+
+    const result = await response.json();
+    
+    if (result.isYouTube) {
+      setYoutubeTranscript(result);
+      setProcessingStep('YouTube transcript extracted!');
+    } else {
+      throw new Error('Unexpected response from YouTube processing');
+    }
+  };
+
+  const handleDownloadTranscript = () => {
+    if (youtubeTranscript && youtubeTranscript.transcript) {
+      const srtContent = generateSRT(youtubeTranscript.transcript);
+      const blob = new Blob([srtContent], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `youtube-transcript-${youtubeTranscript.youtubeId}.srt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const generateSRT = (transcript) => {
+    let srtContent = '';
+    transcript.forEach((entry, index) => {
+      const startTime = formatTime(entry.offset / 1000);
+      const endTime = formatTime((entry.offset + entry.duration) / 1000);
+      srtContent += `${index + 1}\n${startTime} --> ${endTime}\n${entry.text}\n\n`;
+    });
+    return srtContent;
+  };
+
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
   };
 
   const canProcess = (uploadedFile || videoLink) && !isProcessing;
@@ -96,7 +165,7 @@ export default function Home() {
                 onClick={handleProcess}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
               >
-                Process Video
+                {uploadedFile ? 'Process Local Video' : 'Extract YouTube Transcript'}
               </button>
             )}
           </div>
@@ -105,6 +174,13 @@ export default function Home() {
           <div className="space-y-6">
             {isProcessing && (
               <ProcessingStatus step={processingStep} />
+            )}
+            
+            {youtubeTranscript && (
+              <TranscriptDisplay 
+                transcript={youtubeTranscript} 
+                onDownloadTranscript={handleDownloadTranscript}
+              />
             )}
             
             {processedVideo && (

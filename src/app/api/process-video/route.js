@@ -45,7 +45,7 @@ function formatTime(seconds) {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
 
-// Helper function to process video with ffmpeg
+// Helper function to process video with ffmpeg (optimized for speed)
 function processVideoWithSubtitles(inputPath, subtitlePath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
@@ -56,8 +56,9 @@ function processVideoWithSubtitles(inputPath, subtitlePath, outputPath) {
       .outputOptions([
         '-c:v libx264',
         '-c:a aac',
-        '-preset medium',
-        '-crf 23'
+        '-preset ultrafast', // Changed to ultrafast for speed
+        '-crf 28', // Slightly lower quality for faster processing
+        '-movflags +faststart' // Optimize for web playback
       ])
       .output(outputPath)
       .on('end', () => resolve())
@@ -66,11 +67,17 @@ function processVideoWithSubtitles(inputPath, subtitlePath, outputPath) {
   });
 }
 
-// Helper function to extract audio from video
+// Helper function to extract audio from video (optimized)
 function extractAudio(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
-      .outputOptions(['-vn', '-acodec pcm_s16le', '-ar 16000', '-ac 1'])
+      .outputOptions([
+        '-vn', 
+        '-acodec pcm_s16le', 
+        '-ar 16000', 
+        '-ac 1',
+        '-f wav'
+      ])
       .output(outputPath)
       .on('end', () => resolve())
       .on('error', (err) => reject(err))
@@ -103,23 +110,42 @@ export async function POST(request) {
     let videoPath;
     let transcript;
     let isYouTube = false;
+    let videoUrl = '';
+    let youtubeId = '';
 
     // Handle video link (YouTube, Vimeo, direct)
     if (fields.videoLink && fields.videoLink[0]) {
-      const videoUrl = fields.videoLink[0];
+      videoUrl = fields.videoLink[0];
       
       // Check if it's a YouTube URL
-      const youtubeId = extractYouTubeId(videoUrl);
+      youtubeId = extractYouTubeId(videoUrl);
       if (youtubeId) {
         try {
-          // Fetch YouTube transcript
+          console.log('Fetching YouTube transcript for:', youtubeId);
+          // Fetch YouTube transcript - this is fast and free
           transcript = await YoutubeTranscript.fetchTranscript(youtubeId);
           isYouTube = true;
+          console.log('YouTube transcript fetched successfully:', transcript.length, 'entries');
           
-          // For YouTube, we'll need to download the video first
-          // This is a simplified version - in production you'd use youtube-dl
-          throw new Error('YouTube video download not implemented in this demo. Please upload a video file instead.');
+          // For YouTube, we'll return the transcript immediately and provide options
+          // instead of trying to download the video
+          return NextResponse.json({
+            success: true,
+            message: 'YouTube transcript extracted successfully',
+            isYouTube: true,
+            youtubeId: youtubeId,
+            videoUrl: videoUrl,
+            transcript: transcript,
+            duration: transcript.reduce((total, entry) => total + entry.duration, 0) / 1000,
+            options: {
+              canProcessLocally: false,
+              canDownloadSubtitles: true,
+              canBurnSubtitles: false, // YouTube videos can't be downloaded easily
+              message: 'YouTube videos cannot be downloaded for subtitle burning. You can download the transcript or upload a local video file instead.'
+            }
+          });
         } catch (error) {
+          console.error('YouTube transcript error:', error);
           throw new Error('Failed to fetch YouTube transcript: ' + error.message);
         }
       } else {
@@ -132,9 +158,13 @@ export async function POST(request) {
       const uploadedFile = files.video[0];
       videoPath = uploadedFile.filepath;
       
+      console.log('Processing uploaded video file:', uploadedFile.originalFilename);
+      
       // Extract audio for transcription
       const audioPath = join(uploadsDir, `audio_${Date.now()}.wav`);
+      console.log('Extracting audio...');
       await extractAudio(videoPath, audioPath);
+      console.log('Audio extraction completed');
       
       // For demo purposes, we'll create a mock transcript
       // In production, you'd use Whisper.cpp or another speech-to-text service
@@ -144,34 +174,44 @@ export async function POST(request) {
         { offset: 7000, duration: 3000, text: "We hope you find it useful and informative." },
         { offset: 10000, duration: 2000, text: "Thank you for watching!" }
       ];
+      
+      console.log('Mock transcript generated');
     } else {
       throw new Error('No video file or link provided');
     }
 
-    // Generate SRT subtitle file
-    const subtitlePath = join(uploadsDir, `subtitles_${Date.now()}.srt`);
-    const srtContent = generateSRT(transcript);
-    await writeFile(subtitlePath, srtContent, 'utf8');
+    // For uploaded videos, continue with subtitle burning
+    if (videoPath) {
+      console.log('Generating SRT subtitles...');
+      // Generate SRT subtitle file
+      const subtitlePath = join(uploadsDir, `subtitles_${Date.now()}.srt`);
+      const srtContent = generateSRT(transcript);
+      await writeFile(subtitlePath, srtContent, 'utf8');
+      console.log('SRT file generated');
 
-    // Process video with subtitles
-    const outputPath = join(uploadsDir, `output_${Date.now()}.mp4`);
-    await processVideoWithSubtitles(videoPath, subtitlePath, outputPath);
+      console.log('Processing video with subtitles...');
+      // Process video with subtitles
+      const outputPath = join(uploadsDir, `output_${Date.now()}.mp4`);
+      await processVideoWithSubtitles(videoPath, subtitlePath, outputPath);
+      console.log('Video processing completed');
 
-    // Return success response
-    return NextResponse.json({
-      success: true,
-      message: 'Video processed successfully',
-      video: {
-        filename: 'video-with-subtitles.mp4',
-        duration: 12, // Mock duration
-        format: 'MP4',
-        quality: 'HD',
-        subtitles: true,
-        transcript: transcript,
-        previewUrl: `/api/video-preview?path=${encodeURIComponent(outputPath)}`,
-        downloadUrl: `/api/video-download?path=${encodeURIComponent(outputPath)}`
-      }
-    });
+      // Return success response for uploaded videos
+      return NextResponse.json({
+        success: true,
+        message: 'Video processed successfully with subtitles',
+        isYouTube: false,
+        video: {
+          filename: 'video-with-subtitles.mp4',
+          duration: transcript.reduce((total, entry) => total + entry.duration, 0) / 1000,
+          format: 'MP4',
+          quality: 'HD',
+          subtitles: true,
+          transcript: transcript,
+          previewUrl: `/api/video-preview?path=${encodeURIComponent(outputPath)}`,
+          downloadUrl: `/api/video-download?path=${encodeURIComponent(outputPath)}`
+        }
+      });
+    }
 
   } catch (error) {
     console.error('Error processing video:', error);
