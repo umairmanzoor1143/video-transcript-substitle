@@ -1,27 +1,38 @@
 import { NextResponse } from 'next/server';
 import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { existsSync } from 'fs';
-import formidable from 'formidable';
+import { join, extname } from 'path';
+import { existsSync, createWriteStream } from 'fs';
+import { pipeline } from 'stream/promises';
 import { YoutubeTranscript } from 'youtube-transcript';
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegPath from 'ffmpeg-static';
+import ytdl from 'ytdl-core';
 
 // Set ffmpeg path
 ffmpeg.setFfmpegPath(ffmpegPath);
 
-// Configure formidable for file uploads
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 // Helper function to extract YouTube video ID
 function extractYouTubeId(url) {
-  const regex = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\n?#]+)/;
+  const regex = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([^&\n?#]+)/;
   const match = url.match(regex);
   return match ? match[1] : null;
+}
+
+// Normalize transcript entries to include offset/duration in ms and start/end in seconds
+function normalizeTranscript(rawEntries) {
+  return rawEntries.map((entry) => {
+    const startSeconds = typeof entry.offset === 'number' ? entry.offset : (typeof entry.start === 'number' ? entry.start : 0);
+    const durationSeconds = typeof entry.duration === 'number' ? entry.duration : (typeof entry.end === 'number' ? (entry.end - (entry.start ?? startSeconds)) : 0);
+    const startMs = Math.round(startSeconds * 1000);
+    const durationMs = Math.max(0, Math.round(durationSeconds * 1000));
+    return {
+      text: entry.text ?? '',
+      offset: startMs,
+      duration: durationMs,
+      start: startSeconds,
+      end: startSeconds + durationSeconds,
+    };
+  });
 }
 
 // Helper function to generate SRT subtitle content
@@ -66,7 +77,7 @@ function processVideoWithSubtitles(inputPath, subtitlePath, outputPath) {
   });
 }
 
-// Helper function to extract audio from video
+// Helper function to extract audio from video (kept for file uploads)
 function extractAudio(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg(inputPath)
@@ -78,107 +89,98 @@ function extractAudio(inputPath, outputPath) {
   });
 }
 
+async function fetchYouTubeTranscript(youtubeId) {
+  const raw = await YoutubeTranscript.fetchTranscript(youtubeId);
+  return normalizeTranscript(raw);
+}
+
+async function downloadYouTubeVideo(videoUrl, destPath) {
+  const readable = ytdl(videoUrl, { filter: 'audioandvideo', quality: 'highest' });
+  const writable = createWriteStream(destPath);
+  await pipeline(readable, writable);
+}
+
 export async function POST(request) {
   try {
-    // Create uploads directory if it doesn't exist
+    // Ensure uploads directory exists
     const uploadsDir = join(process.cwd(), 'uploads');
     if (!existsSync(uploadsDir)) {
       await mkdir(uploadsDir, { recursive: true });
     }
 
-    // Parse form data
-    const form = formidable({
-      uploadDir: uploadsDir,
-      keepExtensions: true,
-      maxFileSize: 500 * 1024 * 1024, // 500MB limit
-    });
-
-    const [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(request, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
-      });
-    });
+    const formData = await request.formData();
 
     let videoPath;
     let transcript;
-    let isYouTube = false;
 
-    // Handle video link (YouTube, Vimeo, direct)
-    if (fields.videoLink && fields.videoLink[0]) {
-      const videoUrl = fields.videoLink[0];
-      
-      // Check if it's a YouTube URL
-      const youtubeId = extractYouTubeId(videoUrl);
-      if (youtubeId) {
-        try {
-          // Fetch YouTube transcript
-          transcript = await YoutubeTranscript.fetchTranscript(youtubeId);
-          isYouTube = true;
-          
-          // For YouTube, we'll need to download the video first
-          // This is a simplified version - in production you'd use youtube-dl
-          throw new Error('YouTube video download not implemented in this demo. Please upload a video file instead.');
-        } catch (error) {
-          throw new Error('Failed to fetch YouTube transcript: ' + error.message);
-        }
+    const videoLink = formData.get('videoLink');
+    const providedTranscript = formData.get('transcript');
+
+    if (videoLink) {
+      const youtubeId = extractYouTubeId(String(videoLink));
+      if (!youtubeId) {
+        throw new Error('Only YouTube links are supported at the moment. Please upload a file instead.');
+      }
+
+      // Use provided transcript if present, otherwise fetch quickly
+      transcript = providedTranscript ? normalizeTranscript(JSON.parse(String(providedTranscript))) : await fetchYouTubeTranscript(youtubeId);
+
+      // Download the YouTube video fast
+      videoPath = join(uploadsDir, `yt_${youtubeId}_${Date.now()}.mp4`);
+      await downloadYouTubeVideo(String(videoLink), videoPath);
+    } else {
+      const file = formData.get('video');
+      if (file && typeof file === 'object' && 'arrayBuffer' in file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const originalName = file.name || `upload_${Date.now()}.mp4`;
+        const ext = extname(originalName) || '.mp4';
+        videoPath = join(uploadsDir, `upload_${Date.now()}${ext}`);
+        await writeFile(videoPath, Buffer.from(arrayBuffer));
+
+        // For demo: create a short mock transcript covering ~12s
+        transcript = normalizeTranscript([
+          { start: 0, duration: 3, text: 'Hello, welcome to this video.' },
+          { start: 3, duration: 4, text: 'This is a demonstration of our video processing service.' },
+          { start: 7, duration: 3, text: 'We hope you find it useful and informative.' },
+          { start: 10, duration: 2, text: 'Thank you for watching!' },
+        ]);
       } else {
-        // For other URLs, we'd need to download them
-        throw new Error('Direct video URL processing not implemented in this demo. Please upload a video file instead.');
+        throw new Error('No video file or link provided');
       }
     }
-    // Handle uploaded video file
-    else if (files.video && files.video[0]) {
-      const uploadedFile = files.video[0];
-      videoPath = uploadedFile.filepath;
-      
-      // Extract audio for transcription
-      const audioPath = join(uploadsDir, `audio_${Date.now()}.wav`);
-      await extractAudio(videoPath, audioPath);
-      
-      // For demo purposes, we'll create a mock transcript
-      // In production, you'd use Whisper.cpp or another speech-to-text service
-      transcript = [
-        { offset: 0, duration: 3000, text: "Hello, welcome to this video." },
-        { offset: 3000, duration: 4000, text: "This is a demonstration of our video processing service." },
-        { offset: 7000, duration: 3000, text: "We hope you find it useful and informative." },
-        { offset: 10000, duration: 2000, text: "Thank you for watching!" }
-      ];
-    } else {
-      throw new Error('No video file or link provided');
-    }
 
-    // Generate SRT subtitle file
+    // Generate SRT subtitle file from normalized transcript
     const subtitlePath = join(uploadsDir, `subtitles_${Date.now()}.srt`);
     const srtContent = generateSRT(transcript);
     await writeFile(subtitlePath, srtContent, 'utf8');
 
-    // Process video with subtitles
+    // Process video with subtitles burned in
     const outputPath = join(uploadsDir, `output_${Date.now()}.mp4`);
     await processVideoWithSubtitles(videoPath, subtitlePath, outputPath);
 
-    // Return success response
+    // Return payload aligned with UI expectations
+    const durationSeconds = Math.round((transcript.at(-1)?.end ?? 0));
+
     return NextResponse.json({
       success: true,
       message: 'Video processed successfully',
       video: {
         filename: 'video-with-subtitles.mp4',
-        duration: 12, // Mock duration
+        duration: durationSeconds,
         format: 'MP4',
-        quality: 'HD',
+        quality: 'Original',
         subtitles: true,
-        transcript: transcript,
+        transcript,
         previewUrl: `/api/video-preview?path=${encodeURIComponent(outputPath)}`,
-        downloadUrl: `/api/video-download?path=${encodeURIComponent(outputPath)}`
-      }
+        downloadUrl: `/api/video-download?path=${encodeURIComponent(outputPath)}`,
+      },
     });
-
   } catch (error) {
     console.error('Error processing video:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error.message || 'Failed to process video' 
+      {
+        success: false,
+        error: error.message || 'Failed to process video',
       },
       { status: 500 }
     );
