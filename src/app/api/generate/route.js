@@ -67,21 +67,12 @@ export async function POST(request) {
       '- Exactly COUNT items. Each item is a standalone tweet (<=280 chars).\n',
       '- 1–2 sentences max. Active voice. Strong verbs. No buzzwords.\n',
       '- No hashtags, no links, no mentions, no numbered lists, no quote marks around the tweet.\n',
-      '- Max 1 emoji only if it elevates the point.\n',
-      '\nSTYLE MODES:\n',
-      'reaction: one-line punch that sparks curiosity or tension; may be contrarian or imperative; allow em-dash or rhetorical question; zero filler.\n',
-      'relatable: first-person micro-story (1–2 lines) with one concrete detail and a short takeaway at the end; honest, humble, never cheesy.\n',
-      'listicle: numbered list of 3-5 actionable tips/insights; start with "keep it simple" or similar; end with "this is your time to shine" or similar; each point is 2-4 words max.\n',
-      'question: start with a question that makes people think; follow with 2-3 lines of context or setup; end with a strong statement or call to action; conversational tone.\n',
-      'routine: daily habits format like "5h coding. 3h marketing. 1.5h workout."; follow with results and a motivational conclusion; include one emoji at the end.\n',
+      '- no emoji.\n',
       '\nGOOD EXAMPLES (do not copy):\n',
       '- reaction: Most "strategy" is fear wearing an MBA.\n',
       '- reaction: Ship the embarrassing v1. Feedback is your only cofounder.\n',
       '- relatable: I spent 3 hours picking a font. Shipped nothing. The week I stopped, I got my first customer. Focus beats aesthetics.\n',
       '- relatable: I used to rewrite emails 5 times. One day I hit send on the first draft. Nothing broke. Speed is a moat.\n',
-      '- listicle: keep it simple\n1. find a boring niche painpoint\n2. vibe code mvp\n3. use ai as your wedge in\n4. build an audience for an unfair advantage\nthis is your time to shine\n',
-      '- question: Thinking of building an app? Do this first:\n1. Write the landing page copy and add a waitlist\n2. Run $50 in ads\n3. See if anyone cares\nIf no one clicks, think twice.\n',
-      '- routine: 5h coding. 3h marketing. 1.5h workout.\nI did this every single day for 60 days -> now at 783k users.\nConsistency always wins. Start today 💪\n',
       '\nLanguage: match the user input language.'
     ].join('');
 
