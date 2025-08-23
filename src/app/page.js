@@ -1,227 +1,268 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import VideoUploader from './components/VideoUploader';
-import VideoLinkInput from './components/VideoLinkInput';
-import VideoPreview from './components/VideoPreview';
-import ProcessingStatus from './components/ProcessingStatus';
+import { useState } from 'react';
+
+const modes = [
+  { id: 'reaction', name: 'Short powerful statement that causes a reaction' },
+  { id: 'relatable', name: 'A personal story that others can relate to' },
+  { id: 'listicle', name: 'Numbered list of actionable tips' },
+  { id: 'question', name: 'Question that drives engagement' },
+  { id: 'routine', name: 'Daily habits with results' },
+];
+
+function IconPlus() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12 8v8M8 12h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconGlobe() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M3 12h18M12 3c3 4 3 14 0 18M12 3c-3 4-3 14 0 18" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+function IconMic() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconSparkles() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <path d="M12 3l1.8 4.2L18 9l-4.2 1.8L12 15l-1.8-4.2L6 9l4.2-1.8L12 3z" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      <path d="M6 16l1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2zM18 16l.7 1.6L20 18l-1.3.4L18 20l-.7-1.6L16 18l1.3-.4L18 16z" stroke="currentColor" strokeWidth="1" fill="none" />
+    </svg>
+  );
+}
+function IconCopy() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="5" y="5" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+function IconChevron() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-muted-foreground">
+      <path d="M8 10l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 export default function Home() {
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [videoLink, setVideoLink] = useState('');
-  const [transcript, setTranscript] = useState(null);
-  const [isFetchingTranscript, setIsFetchingTranscript] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingStep, setProcessingStep] = useState('');
-  const [processedVideo, setProcessedVideo] = useState(null);
+  const [topic, setTopic] = useState('');
+  const [mode, setMode] = useState('reaction');
+  const [count, setCount] = useState(6);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [tweets, setTweets] = useState([]);
 
-  const handleFileUpload = (file) => {
-    setUploadedFile(file);
-    setVideoLink('');
-    setTranscript(null);
-    setProcessedVideo(null);
+  async function handleGenerate() {
+    setLoading(true);
     setError('');
-  };
-
-  const fetchTranscriptForLink = async (link) => {
+    setTweets([]);
     try {
-      setIsFetchingTranscript(true);
-      setTranscript(null);
-      setError('');
-      const resp = await fetch('/api/youtube-transcript', {
+      const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoLink: link })
+        body: JSON.stringify({ topic, mode, count, exclude: [] }),
       });
-      const data = await resp.json();
-      if (!resp.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch transcript');
-      }
-      setTranscript(data.transcript);
-    } catch (e) {
-      setError(e.message || 'Failed to fetch transcript');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to generate');
+      setTweets(Array.isArray(data.tweets) ? data.tweets : []);
+    } catch (err) {
+      setError(err.message || 'Something went wrong');
     } finally {
-      setIsFetchingTranscript(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const handleLinkSubmit = (link) => {
-    setVideoLink(link);
-    setUploadedFile(null);
-    setProcessedVideo(null);
+  async function handleMore() {
+    if (!topic.trim()) return;
+    setLoading(true);
     setError('');
-    if (link) {
-      fetchTranscriptForLink(link);
-    } else {
-      setTranscript(null);
-    }
-  };
-
-  const handleProcess = async () => {
-    if (!uploadedFile && !videoLink) {
-      setError('Please upload a video file or provide a video link');
-      return;
-    }
-
-    setIsProcessing(true);
-    setProcessingStep('Starting processing...');
-    setError('');
-
     try {
-      const formData = new FormData();
-      if (uploadedFile) {
-        formData.append('video', uploadedFile);
-      } else if (videoLink) {
-        formData.append('videoLink', videoLink);
-        if (transcript) {
-          formData.append('transcript', JSON.stringify(transcript));
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, mode, count, exclude: tweets.map((t) => t.text) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Failed to generate');
+      const incoming = Array.isArray(data.tweets) ? data.tweets : [];
+      // De-dup safeguard on client
+      const existing = new Set(tweets.map((t) => t.text.toLowerCase()));
+      const merged = [...tweets];
+      for (const t of incoming) {
+        const key = (t.text || '').toLowerCase();
+        if (!existing.has(key)) {
+          existing.add(key);
+          merged.push(t);
         }
       }
-
-      setProcessingStep('Downloading video...');
-      const response = await fetch('/api/process-video', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to process video');
-      }
-
-      setProcessedVideo(result.video);
-      setProcessingStep('Processing complete!');
+      setTweets(merged);
     } catch (err) {
-      setError(err.message || 'An error occurred during processing');
+      setError(err.message || 'Something went wrong');
     } finally {
-      setIsProcessing(false);
+      setLoading(false);
     }
-  };
+  }
 
-  const canProcess = (uploadedFile || videoLink) && !isProcessing;
+  function copy(text) {
+    navigator.clipboard.writeText(text);
+  }
+
+  function formatTweetText(text) {
+    if (!text) return '';
+    
+    // Convert numbered lists to proper formatting
+    let formatted = text
+      .replace(/(\d+\.\s)/g, '\n$1') // Add line break before numbered items
+      .replace(/(\n\d+\.\s)/g, '\n• ') // Convert numbered to bullet points
+      .replace(/(\n•\s)/g, '\n• ') // Ensure consistent bullet formatting
+      .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
+      .trim();
+    
+    return formatted;
+  }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            Video Transcript & Subtitle Burner
-          </h1>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Upload a video file or provide a video link to automatically generate transcripts 
-            and burn subtitles into your video. Support for YouTube, Vimeo, and direct video links.
-          </p>
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto max-w-5xl px-4 py-12">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">
+            <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+            AI Tweet Studio
+          </div>
+          <h1 className="mt-4 text-4xl md:text-5xl font-semibold tracking-tight text-foreground">What&apos;s on your mind today?</h1>
+          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">Turn a thought into a feed-ready post. Choose your style, and get crisp, original tweets in seconds.</p>
         </div>
 
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* Left Column - Input Methods */}
-          <div className="space-y-6">
-            <VideoUploader onFileUpload={handleFileUpload} uploadedFile={uploadedFile} />
-            <div className="text-center text-gray-500">- OR -</div>
-            <VideoLinkInput onSubmit={handleLinkSubmit} videoLink={videoLink} />
-
-            {/* Transcript Panel for YouTube links */}
-            {videoLink && (
-              <div className="bg-white rounded-xl shadow-lg p-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-lg font-semibold text-gray-900">Transcript</h3>
-                  {isFetchingTranscript && (
-                    <span className="text-sm text-blue-600">Fetching...</span>
-                  )}
-                </div>
-                {transcript ? (
-                  <div className="max-h-48 overflow-y-auto text-sm text-gray-700 space-y-2">
-                    {transcript.slice(0, 50).map((t, i) => (
-                      <div key={i} className="flex items-start">
-                        <span className="text-gray-500 text-xs w-24 shrink-0">
-                          {Math.floor(t.start / 60)}:{Math.floor(t.start % 60).toString().padStart(2, '0')} - {Math.floor(t.end / 60)}:{Math.floor(t.end % 60).toString().padStart(2, '0')}
-                        </span>
-                        <span className="ml-2">{t.text}</span>
-                      </div>
-                    ))}
-                    {transcript.length > 50 && (
-                      <p className="text-gray-500 text-xs italic">... and more</p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">{isFetchingTranscript ? 'Please wait...' : 'No transcript available yet.'}</p>
-                )}
-
-                <button
-                  disabled={!transcript || isProcessing}
-                  onClick={handleProcess}
-                  className={`mt-4 w-full ${!transcript || isProcessing ? 'bg-gray-300 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'} text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200`}
-                >
-                  Burn subtitles into video
+        <div className="rounded-2xl border border-border bg-card p-3 md:p-4 shadow-sm">
+          <div className="rounded-xl border border-input/80 bg-background">
+            {/* Top chip row */}
+            <div className="flex items-center gap-2 p-3 border-b border-border/60">
+              <button className="h-7 w-7 grid place-items-center rounded-full border border-input bg-card hover:bg-secondary" aria-label="Add">
+                <IconPlus />
+              </button>
+              {topic ? (
+                <span className="inline-flex items-center gap-2 rounded-full border border-input bg-card px-3 py-1 text-xs text-foreground/80 max-w-[50%] truncate">
+                  {topic}
+                </span>
+              ) : (
+                <span className="text-xs text-muted-foreground">Add a link or write a thought…</span>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <button className="h-8 w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Language">
+                  <IconGlobe />
+                </button>
+                <button className="h-8 w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Voice">
+                  <IconMic />
+                </button>
+                <button className="h-8 w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Magic">
+                  <IconSparkles />
                 </button>
               </div>
-            )}
+            </div>
+            {/* Controls row */}
+            <div className="flex flex-wrap items-center gap-3 p-3">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
+                  <span className="text-foreground">Style</span>
+                  <select
+                    value={mode}
+                    onChange={(e) => setMode(e.target.value)}
+                    className="bg-transparent text-foreground text-sm focus:outline-none"
+                  >
+                    {modes.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 py-2 text-sm">
+                  <span className="text-foreground">Persona</span>
+                  <button className="inline-flex items-center gap-2 text-sm text-foreground">
+                    Jarvis <IconChevron />
+                  </button>
+                </div>
+              </div>
 
-            {canProcess && !videoLink && (
-              <button
-                onClick={handleProcess}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-              >
-                Process Video
-              </button>
-            )}
-          </div>
-
-          {/* Right Column - Preview/Status */}
-          <div className="space-y-6">
-            {isProcessing && (
-              <ProcessingStatus step={processingStep} />
-            )}
-            {processedVideo && (
-              <VideoPreview video={processedVideo} />
-            )}
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  onClick={handleGenerate}
+                  disabled={loading || !topic.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50 shadow-sm"
+                >
+                  <IconSparkles /> {loading ? 'Generating…' : 'Get new post ideas'}
+                </button>
+                <button
+                  onClick={handleMore}
+                  disabled={loading || !topic.trim()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-input bg-card text-foreground px-4 py-2 text-sm font-medium hover:bg-secondary disabled:opacity-50"
+                >
+                  <IconSparkles /> Get more tweets
+                </button>
+              </div>
+            </div>
+            {/* Textarea */}
+            <div className="p-3 border-t border-border/60">
+              <textarea
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="Write your thought or paste a link…"
+                className="w-full resize-y min-h-28 rounded-lg border border-input px-4 py-3 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
           </div>
         </div>
 
-        {/* Error Display */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
+          <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 text-destructive px-4 py-3">{error}</div>
         )}
 
-        {/* Features */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Features</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m-9 0h10m-10 0a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V6a2 2 0 00-2-2" />
-                </svg>
+        <h2 className="mt-10 mb-4 text-2xl font-semibold text-center text-foreground">Results</h2>
+
+        <div className="grid gap-4 md:gap-6 grid-cols-1 md:grid-cols-2">
+          {loading && (
+            Array.from({ length: Math.max(2, Math.min(6, count)) }).map((_, i) => (
+              <div key={`s-${i}`} className="rounded-2xl border border-border bg-card p-5 shadow-sm animate-pulse">
+                <div className="h-4 w-2/5 bg-muted rounded mb-3" />
+                <div className="h-3 w-full bg-muted rounded mb-2" />
+                <div className="h-3 w-11/12 bg-muted rounded mb-4" />
+                <div className="h-8 w-32 bg-muted rounded" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-2">Multiple Input Sources</h3>
-              <p className="text-gray-600 text-sm">Upload local files or paste YouTube/Vimeo links</p>
-            </div>
-            
-            <div className="text-center">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+            ))
+          )}
+          {!loading && tweets.map((t, idx) => (
+            <div key={idx} className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="flex items-start gap-3">
+                <img alt="avatar" className="h-9 w-9 rounded-full object-cover" src="https://avatar.vercel.sh/u" />
+                <div className="flex-1">
+                  <div className="font-semibold text-foreground">umair manzoor</div>
+                  <p className="text-foreground/80 mt-1 whitespace-pre-line">{formatTweetText(t.text)}</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="flex gap-2">
+                      <a href="#" className="rounded-lg border border-input px-3 py-2 text-sm hover:bg-secondary inline-flex items-center gap-2">
+                        Open in editor <IconChevron />
+                      </a>
+                    </div>
+                    <button onClick={() => copy(t.text)} className="h-8 w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Copy">
+                      <IconCopy />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <h3 className="font-semibold text-gray-900 mb-2">Auto Transcription</h3>
-              <p className="text-gray-600 text-sm">AI-powered speech recognition for accurate transcripts</p>
             </div>
-            
-            <div className="text-center">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-gray-900 mb-2">Hardcoded Subtitles</h3>
-              <p className="text-gray-600 text-sm">Burn subtitles directly into video for permanent display</p>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </main>
