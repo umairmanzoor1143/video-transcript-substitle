@@ -161,7 +161,7 @@ export default function Home() {
               ) : (
                 <span className="text-xs text-muted-foreground">Add a link or write a thought…</span>
               )}
-              <div className="ml-auto flex items-center gap-1 sm:gap-2">
+              {/* <div className="ml-auto flex items-center gap-1 sm:gap-2">
                 <button className="h-6 w-6 sm:h-8 sm:w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Language">
                   <IconGlobe />
                 </button>
@@ -171,7 +171,7 @@ export default function Home() {
                 <button className="h-6 w-6 sm:h-8 sm:w-8 grid place-items-center rounded-lg border border-input hover:bg-secondary" aria-label="Magic">
                   <IconSparkles />
                 </button>
-              </div>
+              </div> */}
             </div>
             {/* Controls row */}
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3 p-2 sm:p-3">
@@ -188,12 +188,12 @@ export default function Home() {
                     ))}
                   </select>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-2 sm:px-3 py-2 text-sm">
+                {/* <div className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-2 sm:px-3 py-2 text-sm">
                   <span className="text-foreground text-xs sm:text-sm">Persona</span>
                   <button className="inline-flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-foreground">
                     Jarvis <IconChevron />
                   </button>
-                </div>
+                </div> */}
               </div>
 
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto sm:ml-auto">
@@ -202,7 +202,7 @@ export default function Home() {
                   disabled={loading || !topic.trim()}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground px-4 sm:px-6 py-2 sm:py-3 text-sm font-medium hover:opacity-90 disabled:opacity-50 shadow-sm"
                 >
-                  <IconSparkles /> {loading ? 'Generating…' : 'Get new post ideas'}
+                  <IconSparkles /> {loading ? 'Generating…' : 'Generate'}
                 </button>
                 <button
                   onClick={handleMore}
