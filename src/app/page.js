@@ -70,11 +70,23 @@ export default function Home() {
   const [error, setError] = useState('');
   const [tweets, setTweets] = useState([]);
   const [charCount, setCharCount] = useState(0);
+  const [textLimit, setTextLimit] = useState(280);
 
   function handleTopicChange(e) {
     const value = e.target.value;
-    setTopic(value.slice(0, MAX_POST_LENGTH));
-    setCharCount(value.length > MAX_POST_LENGTH ? MAX_POST_LENGTH : value.length);
+    setTopic(value.slice(0, textLimit));
+    setCharCount(value.length > textLimit ? textLimit : value.length);
+  }
+
+  function handleTextLimitChange(e) {
+    let value = parseInt(e.target.value, 10);
+    if (isNaN(value)) value = 280;
+    if (value < 40) value = 40;
+    if (value > 280) value = 280;
+    setTextLimit(value);
+    if (topic.length > value) {
+      setTopic(topic.slice(0, value));
+    }
   }
 
   async function handleGenerate() {
@@ -85,7 +97,7 @@ export default function Home() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, mode, count, exclude: [] }),
+        body: JSON.stringify({ topic, mode, count, exclude: [], textLimit }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to generate');
@@ -105,7 +117,7 @@ export default function Home() {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, mode, count, exclude: tweets.map((t) => t.text) }),
+        body: JSON.stringify({ topic, mode, count, exclude: tweets.map((t) => t.text), textLimit }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Failed to generate');
@@ -225,16 +237,29 @@ export default function Home() {
               </div>
             </div>
             {/* Textarea */}
+            <div className="flex flex-col sm:flex-row items-center gap-2 mb-2">
+              <label htmlFor="textLimit" className="text-xs text-muted-foreground">Text limit:</label>
+              <input
+                id="textLimit"
+                type="number"
+                min={40}
+                max={280}
+                value={textLimit}
+                onChange={handleTextLimitChange}
+                className="w-20 border border-input rounded px-2 py-1 text-xs text-foreground bg-background focus:outline-none"
+              />
+              <span className="text-xs text-muted-foreground">characters</span>
+            </div>
             <div className="p-2 sm:p-3 border-t border-border/60">
               <textarea
                 value={topic}
                 onChange={handleTopicChange}
                 placeholder="Write your thought or paste a link…"
-                maxLength={MAX_POST_LENGTH}
+                maxLength={textLimit}
                 className="w-full resize-y min-h-24 sm:min-h-28 rounded-lg border border-input px-3 sm:px-4 py-2 sm:py-3 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm sm:text-base"
               />
               <div className="text-xs text-muted-foreground text-right mt-1">
-                {charCount}/{MAX_POST_LENGTH} characters
+                {charCount}/{textLimit} characters
               </div>
             </div>
           </div>

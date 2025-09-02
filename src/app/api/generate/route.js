@@ -73,6 +73,8 @@ export async function POST(request) {
     const countRaw = Number(body.count);
     const count = Number.isFinite(countRaw) && countRaw > 0 && countRaw <= 10 ? Math.floor(countRaw) : 4;
     const exclude = Array.isArray(body.exclude) ? body.exclude.filter((t) => typeof t === 'string') : [];
+    const textLimitRaw = Number(body.textLimit);
+    const textLimit = Number.isFinite(textLimitRaw) && textLimit >= 40 && textLimit <= 280 ? Math.floor(textLimitRaw) : 280;
 
     // Fallbacks for empty input
     const fallbackQuestions = [
@@ -337,7 +339,7 @@ export async function POST(request) {
       // Collapse whitespace
       text = text.replace(/\s+/g, ' ')
       // Enforce length
-      if (text.length > 280) text = text.slice(0, 279).trimEnd()
+      if (text.length > textLimit) text = text.slice(0, textLimit).trimEnd()
       return text
     }
 
@@ -346,13 +348,13 @@ export async function POST(request) {
 
     if (Array.isArray(parsed.tweets)) {
       for (const t of parsed.tweets) {
-        const text = cleanTweet(t?.text)
-        if (!text) continue
-        const key = text.toLowerCase()
-        if (seen.has(key)) continue // avoid duplicates with prior results
-        seen.add(key)
-        normalized.push({ text })
-        if (normalized.length >= count) break
+        const text = cleanTweet(t?.text);
+        if (!text || text.length > textLimit) continue;
+        const key = text.toLowerCase();
+        if (seen.has(key)) continue; // avoid duplicates with prior results
+        seen.add(key);
+        normalized.push({ text });
+        if (normalized.length >= count) break;
       }
     }
 
