@@ -41,17 +41,21 @@ export async function getTranscript(videoId = 'e8krKpuaby8', lang = 'en') {
 
 function paramsForMode(mode) {
   switch (mode) {
+    case 'professional':
+      return { temperature: 0.6, presence_penalty: 0.2 };
+    case 'learning':
+      return { temperature: 0.7, presence_penalty: 0.3 };
     case 'reaction':
-      return { temperature: 0.75, presence_penalty: 0.4 }
+      return { temperature: 0.75, presence_penalty: 0.4 };
     case 'relatable':
-      return { temperature: 0.7, presence_penalty: 0.35 }
+      return { temperature: 0.7, presence_penalty: 0.35 };
     case 'listicle':
-      return { temperature: 0.65, presence_penalty: 0.3 }
+      return { temperature: 0.65, presence_penalty: 0.3 };
     case 'question':
-      return { temperature: 0.65, presence_penalty: 0.25 }
+      return { temperature: 0.65, presence_penalty: 0.25 };
     case 'routine':
     default:
-      return { temperature: 0.6, presence_penalty: 0.25 }
+      return { temperature: 0.6, presence_penalty: 0.25 };
   }
 }
 
@@ -62,13 +66,50 @@ function supportsJsonResponseFormat(model) {
 
 export async function POST(request) {
   try {
-    const body = await request.json()
-    const topic = typeof body.topic === 'string' ? body.topic.trim() : ''
-    const validModes = ['reaction', 'relatable', 'listicle', 'question', 'routine']
-    const mode = validModes.includes(body.mode) ? body.mode : 'reaction'
-    const countRaw = Number(body.count)
-    const count = Number.isFinite(countRaw) && countRaw > 0 && countRaw <= 10 ? Math.floor(countRaw) : 4
-    const exclude = Array.isArray(body.exclude) ? body.exclude.filter((t) => typeof t === 'string') : []
+    const body = await request.json();
+    let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+    const validModes = ['professional', 'learning', 'reaction', 'relatable', 'listicle', 'question', 'routine'];
+    const mode = validModes.includes(body.mode) ? body.mode : 'professional';
+    const countRaw = Number(body.count);
+    const count = Number.isFinite(countRaw) && countRaw > 0 && countRaw <= 10 ? Math.floor(countRaw) : 4;
+    const exclude = Array.isArray(body.exclude) ? body.exclude.filter((t) => typeof t === 'string') : [];
+
+    // Fallbacks for empty input
+    const fallbackQuestions = [
+      'How do you validate a startup idea?',
+      'What is the fastest way to ship a new product?',
+      'How do you find your first users?',
+      'What is the best way to get feedback on an MVP?',
+      'How do you avoid overengineering early?',
+      'What is a common mistake when launching a SaaS?',
+      'How do you balance speed and quality in product development?',
+      'What is the best way to learn from failed launches?',
+      'How do you prioritize features for launch?',
+      'What is the most underrated skill for founders?'
+    ];
+    const fallbackLearnings = [
+      'A new way to validate startup ideas using customer interviews.',
+      'How to use rapid prototyping to test product-market fit.',
+      'Lessons learned from launching a SaaS in 30 days.',
+      'The importance of distribution over product perfection.',
+      'How to use user feedback to iterate quickly.',
+      'Why most MVPs fail and how to avoid it.',
+      'How to leverage open source tools for faster shipping.',
+      'The role of constraints in creative product development.',
+      'How to build a landing page that actually converts.',
+      'What I learned from my first failed startup.'
+    ];
+    if (!topic) {
+      if (mode === 'question') {
+        topic = fallbackQuestions[Math.floor(Math.random() * fallbackQuestions.length)];
+      } else if (mode === 'learning') {
+        topic = fallbackLearnings[Math.floor(Math.random() * fallbackLearnings.length)];
+      } else if (mode === 'professional') {
+        topic = 'Share a professional insight or actionable advice for founders or developers.';
+      } else {
+        topic = 'Share a useful, specific, and conversation-worthy post for founders or developers.';
+      }
+    }
 
     if (!topic) {
       return new Response(JSON.stringify({ error: 'Please provide a topic or draft text.' }), {
@@ -104,7 +145,11 @@ export async function POST(request) {
 
     // ---------- New, sharper system prompt ----------
     const systemPrompt = [
-      'You are a senior X (Twitter) ghostwriter for a technical founder who builds multiple startups, ships fast, and speaks plainly.\n\n',
+      mode === 'professional'
+        ? 'You are a professional social media ghostwriter for founders and developers. Write crisp, actionable, and insightful posts that demonstrate expertise and provide real value.'
+        : mode === 'learning'
+        ? 'You are a learning-focused ghostwriter. Share new knowledge, surprising facts, or actionable lessons that help founders and developers grow.'
+        : 'You are a senior X (Twitter) ghostwriter for a technical founder who builds multiple startups, ships fast, and speaks plainly.\n\n',
       'OUTPUT FORMAT (HARD CONSTRAINTS)\n',
       '- Return JSON ONLY: {"tweets":[{"text":"..."}]}\n',
       '- Exactly COUNT items; each item is a single tweet (<=280 chars).\n',
@@ -128,22 +173,76 @@ export async function POST(request) {
       '- Extract 3–6 concrete facts first (frameworks, APIs, errors, trade-offs, numbers, quotes). Use at least one fact per tweet.\n',
       '- Prefer conflict points, failed assumptions, counterintuitive lessons, or design/API limitations.\n\n',
       'MODE SHAPES (CHOOSE TONE/PATTERN BASED ON MODE)\n',
+      '- professional → actionable insight, tip, or lesson for founders/developers.\n',
+      '- learning → share a new learning, surprising fact, or actionable lesson.\n',
       '- reaction → sharp take or pushback on a common belief; 1–2 punchy lines.\n',
       '- relatable → first-person micro-confession with a practical takeaway.\n',
       '- listicle → one compact line with 3 fragments separated by em dashes (—) or dots · (not numbers).\n',
-      '- question → single high-signal question that invites practitioners to answer with examples, constraints, or code.\n',
+      '- question → single high-signal, actionable, or popular question that invites practitioners to answer with examples, constraints, or code.\n',
       '- routine → a tiny repeatable habit with context and payoff.\n\n',
       'GOOD EXAMPLES (do not copy)\n',
-      '- reaction: Most “prioritization” is procrastination with a spreadsheet.\n',
-      '- relatable: I chased pixel-perfect dashboards for weeks. Shipping a boring CSV got me my first renewal.\n',
-      '- listicle: Tight loop — tiny feature — real user — ruthless delete.\n',
-      '- question: What’s the smallest metric that actually changed your roadmap last month?\n',
-      '- routine: Start demos from the ugliest screen. If they stay, you’re close to PMF.\n\n',
-      'FINAL CHECK (SELF-EDIT)\n',
-      '- If a tweet reads like advice without a constraint, add one.\n',
-      '- If it reads generic, insert a concrete noun (queue, index, cold start, cron, retries, rollout).\n',
-      '- Keep 120–220 chars when possible for pace and punch.\n',
-    ].join('')
+      '- question: How do you validate a startup idea?\n',
+      '- question: What is the fastest way to ship a new product?\n',
+      '- question: How do you find your first users?\n',
+      '- question: What is the best way to get feedback on an MVP?\n',
+      '- question: How do you avoid overengineering early?\n',
+      '- learning: A new way to validate startup ideas using customer interviews.\n',
+      '- learning: How to use rapid prototyping to test product-market fit.\n',
+      '- learning: Lessons learned from launching a SaaS in 30 days.\n',
+      '- learning: The importance of distribution over product perfection.\n',
+      '- learning: How to use user feedback to iterate quickly.\n',
+      '- professional: The best founders ship before they’re ready, then iterate.\n',
+      '- professional: If you’re not embarrassed by v1, you shipped too late.\n',
+      '- professional: Most MVPs fail because they try to do too much.\n',
+      '- professional: Distribution is more important than features.\n',
+      '- professional: The best feedback comes from real users, not friends.\n',
+      '- professional: Speed is a feature.\n',
+      '- professional: Constraints drive creativity.\n',
+      '- professional: The best products solve boring problems.\n',
+      '- professional: Don’t optimize for scale before you have users.\n',
+      '- professional: The best way to learn is to ship and iterate.\n',
+      '- professional: Don’t build for everyone; build for someone.\n',
+      '- professional: The best products are opinionated.\n',
+      '- professional: Don’t be afraid to delete features.\n',
+      '- professional: The best founders are relentless about feedback.\n',
+      '- professional: Don’t be afraid to launch ugly.\n',
+      '- professional: The best products are simple.\n',
+      '- professional: Don’t be afraid to say no.\n',
+      '- professional: The best products are built by small teams.\n',
+      '- professional: Don’t be afraid to pivot.\n',
+      '- professional: The best products are built for yourself.\n',
+      '- professional: Don’t be afraid to charge early.\n',
+      '- professional: The best products are built in public.\n',
+      '- professional: Don’t be afraid to ask for help.\n',
+      '- professional: The best products are built with love.\n',
+      '- professional: Don’t be afraid to fail.\n',
+      '- professional: The best products are built by people who care.\n',
+      '- professional: Don’t be afraid to start over.\n',
+      '- professional: The best products are built by people who listen.\n',
+      '- professional: Don’t be afraid to experiment.\n',
+      '- professional: The best products are built by people who learn.\n',
+      '- professional: Don’t be afraid to try new things.\n',
+      '- professional: The best products are built by people who share.\n',
+      '- professional: Don’t be afraid to ask questions.\n',
+      '- professional: The best products are built by people who teach.\n',
+      '- professional: Don’t be afraid to give back.\n',
+      '- professional: The best products are built by people who care about users.\n',
+      '- professional: Don’t be afraid to build for yourself.\n',
+      '- professional: The best products are built by people who solve their own problems.\n',
+      '- professional: Don’t be afraid to build for a niche.\n',
+      '- professional: The best products are built by people who focus.\n',
+      '- professional: Don’t be afraid to build for fun.\n',
+      '- professional: The best products are built by people who enjoy the process.\n',
+      '- professional: Don’t be afraid to build for the long term.\n',
+      '- professional: The best products are built by people who care about quality.\n',
+      '- professional: Don’t be afraid to build for impact.\n',
+      '- professional: The best products are built by people who care about results.\n',
+      '- professional: Don’t be afraid to build for change.\n',
+      '- professional: The best products are built by people who care about making a difference.\n',
+      '- professional: Don’t be afraid to build for the future.\n',
+      '- professional: The best products are built by people who care about the world.\n',
+      '- professional: Don’t be afraid to build for yourself.'
+    ].join('');
 
     // ---------- New user prompt ----------
     const excludeBullets = exclude.length ? exclude.map((t) => `• ${t}`).join('\n') : ''

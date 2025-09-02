@@ -3,12 +3,16 @@
 import { useState } from 'react';
 
 const modes = [
+  { id: 'professional', name: 'Professional insight or actionable advice' },
+  { id: 'learning', name: 'Share a new learning or knowledge nugget' },
   { id: 'reaction', name: 'Short powerful statement that causes a reaction' },
   { id: 'relatable', name: 'A personal story that others can relate to' },
-  { id: 'listicle', name: 'Numbered list of actionable tips' },
-  { id: 'question', name: 'Question that drives engagement' },
+  { id: 'listicle', name: 'List of actionable tips (not numbered)' },
+  { id: 'question', name: 'Popular, actionable question (e.g. "How to validate a startup idea?")' },
   { id: 'routine', name: 'Daily habits with results' },
 ];
+
+const MAX_POST_LENGTH = 280;
 
 function IconPlus() {
   return (
@@ -60,11 +64,18 @@ function IconChevron() {
 
 export default function Home() {
   const [topic, setTopic] = useState('');
-  const [mode, setMode] = useState('reaction');
+  const [mode, setMode] = useState('professional');
   const [count, setCount] = useState(6);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tweets, setTweets] = useState([]);
+  const [charCount, setCharCount] = useState(0);
+
+  function handleTopicChange(e) {
+    const value = e.target.value;
+    setTopic(value.slice(0, MAX_POST_LENGTH));
+    setCharCount(value.length > MAX_POST_LENGTH ? MAX_POST_LENGTH : value.length);
+  }
 
   async function handleGenerate() {
     setLoading(true);
@@ -217,10 +228,14 @@ export default function Home() {
             <div className="p-2 sm:p-3 border-t border-border/60">
               <textarea
                 value={topic}
-                onChange={(e) => setTopic(e.target.value)}
+                onChange={handleTopicChange}
                 placeholder="Write your thought or paste a link…"
+                maxLength={MAX_POST_LENGTH}
                 className="w-full resize-y min-h-24 sm:min-h-28 rounded-lg border border-input px-3 sm:px-4 py-2 sm:py-3 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring text-sm sm:text-base"
               />
+              <div className="text-xs text-muted-foreground text-right mt-1">
+                {charCount}/{MAX_POST_LENGTH} characters
+              </div>
             </div>
           </div>
         </div>
