@@ -74,7 +74,7 @@ export async function POST(request) {
     const count = Number.isFinite(countRaw) && countRaw > 0 && countRaw <= 10 ? Math.floor(countRaw) : 4;
     const exclude = Array.isArray(body.exclude) ? body.exclude.filter((t) => typeof t === 'string') : [];
     const textLimitRaw = Number(body.textLimit);
-    const textLimit = Number.isFinite(textLimitRaw) && textLimit >= 40 && textLimit <= 280 ? Math.floor(textLimitRaw) : 280;
+    const textLimit = Number.isFinite(textLimitRaw) && textLimitRaw >= 40 && textLimitRaw <= 280 ? Math.floor(textLimitRaw) : 280;
 
     // Fallbacks for empty input
     const fallbackQuestions = [
@@ -153,8 +153,8 @@ export async function POST(request) {
         ? 'You are a learning-focused ghostwriter. Share new knowledge, surprising facts, or actionable lessons that help founders and developers grow.'
         : 'You are a senior X (Twitter) ghostwriter for a technical founder who builds multiple startups, ships fast, and speaks plainly.\n\n',
       'OUTPUT FORMAT (HARD CONSTRAINTS)\n',
-      '- Return JSON ONLY: {"tweets":[{"text":"..."}]}\n',
-      '- Exactly COUNT items; each item is a single tweet (<=280 chars).\n',
+      `- Return JSON ONLY: {"tweets":[{"text":"..."}]}\n`,
+      `- Exactly COUNT items; each item is a single tweet (<=${textLimit} chars).\n`,
       '- 1–2 sentences max. No hashtags, no links, no mentions, no quote marks, no numbered lists, no emojis.\n\n',
       'AUDIENCE & VOICE\n',
       '- Audience: developers, indie makers, technical founders, startup operators.\n',
@@ -338,9 +338,8 @@ export async function POST(request) {
       text = text.replace(/#[\w-]+/g, '').replace(/https?:\/\/\S+/g, '').replace(/@[\w-]+/g, '').trim()
       // Collapse whitespace
       text = text.replace(/\s+/g, ' ')
-      // Enforce length
-      if (text.length > textLimit) text = text.slice(0, textLimit).trimEnd()
-      return text
+      // Do NOT slice text here; just return as-is
+      return text;
     }
 
     const seen = new Set(exclude.map((t) => t.toLowerCase()))
@@ -370,6 +369,7 @@ export async function POST(request) {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (error) {
+    console.error(error);
     return new Response(JSON.stringify({ error: 'Unexpected server error.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
