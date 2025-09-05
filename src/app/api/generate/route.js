@@ -70,8 +70,7 @@ export async function POST(request) {
     let topic = typeof body.topic === 'string' ? body.topic.trim() : '';
     const validModes = ['professional', 'learning', 'reaction', 'relatable', 'listicle', 'question', 'routine'];
     const mode = validModes.includes(body.mode) ? body.mode : 'professional';
-    const countRaw = Number(body.count);
-    const count = Number.isFinite(countRaw) && countRaw > 0 && countRaw <= 10 ? Math.floor(countRaw) : 4;
+    const count = 6;
     const exclude = Array.isArray(body.exclude) ? body.exclude.filter((t) => typeof t === 'string') : [];
     const textLimitRaw = Number(body.textLimit);
     const textLimit = Number.isFinite(textLimitRaw) && textLimitRaw >= 40 && textLimitRaw <= 280 ? Math.floor(textLimitRaw) : 280;
@@ -247,27 +246,32 @@ export async function POST(request) {
     ].join('');
 
     // ---------- New user prompt ----------
-    const excludeBullets = exclude.length ? exclude.map((t) => `• ${t}`).join('\n') : ''
+    let userPrompt;
+    if (context) {
+      userPrompt = [
+        `You just watched this YouTube video. Here are the main points from the transcript:`,
+        context,
+        '',
+        `Write ${count} short, practical, and real posts (max ${textLimit} characters each) inspired by the transcript above.`,
+        'Each post should be a complete thought, not a list, and should sound like something a real person would share on social media.',
+        'Avoid generic advice, avoid buzzwords, and don’t repeat the transcript verbatim. Use your own words, be specific, and keep it natural.',
+        'No hashtags, no links, no mentions, no emojis, no numbered lists, no quote marks.',
+        'If the transcript is about failure, focus on real lessons, honest reflections, or questions people might actually ask after watching.',
+        'If you can, make each post a little different in style or focus.'
+      ].join('\n');
+    } else {
+      userPrompt = [
+        `Write ${count} short, practical, and real posts (max ${textLimit} characters each) about this topic:`,
+        topic,
+        '',
+        'Each post should be a complete thought, not a list, and should sound like something a real person would share on social media.',
+        'Avoid generic advice, avoid buzzwords, and don’t repeat the topic verbatim. Use your own words, be specific, and keep it natural.',
+        'No hashtags, no links, no mentions, no emojis, no numbered lists, no quote marks.',
+        'If you can, make each post a little different in style or focus.'
+      ].join('\n');
+    }
 
-    const userPrompt = [
-      `MODE: ${mode}`,
-      `COUNT: ${count}`,
-      '',
-      'TASK',
-      'Generate founder/dev-focused tweets that are useful, specific, and conversation-worthy. Prefer concrete constraints, trade-offs, bugs, and decisions over vague motivation.',
-      '',
-      'CONTEXT',
-      context
-        ? `Use these transcript takeaways to ground at least one detail per tweet (names, tools, limits, or numbers allowed; no fabricated data):\n${context}`
-        : `Topic: ${topic}`,
-      '',
-      'EXCLUSIONS',
-      excludeBullets || '(none)',
-      '',
-      'OUTPUT',
-      'Return ONLY valid JSON in the exact shape: {"tweets":[{"text":"..."}]} .',
-      'Do not include your notes or analysis.',
-    ].join('\n')
+    const excludeBullets = exclude.length ? exclude.map((t) => `• ${t}`).join('\n') : ''
 
     const { temperature, presence_penalty } = paramsForMode(mode)
 
@@ -345,6 +349,7 @@ export async function POST(request) {
     const seen = new Set(exclude.map((t) => t.toLowerCase()))
     const normalized = []
 
+    // Only accept exactly 'count' posts, no more, no less (if possible)
     if (Array.isArray(parsed.tweets)) {
       for (const t of parsed.tweets) {
         const text = cleanTweet(t?.text);
@@ -355,6 +360,10 @@ export async function POST(request) {
         normalized.push({ text });
         if (normalized.length >= count) break;
       }
+    }
+    // If not enough, pad with empty posts to always return 6
+    while (normalized.length < count) {
+      normalized.push({ text: '' });
     }
 
     if (normalized.length === 0) {
