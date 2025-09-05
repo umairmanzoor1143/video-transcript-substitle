@@ -146,130 +146,80 @@ export async function POST(request) {
 
     // ---------- New, sharper system prompt ----------
     const systemPrompt = [
+      // Mode persona
       mode === 'professional'
-        ? 'You are a professional social media ghostwriter for founders and developers. Write crisp, actionable, and insightful posts that demonstrate expertise and provide real value.'
+        ? 'You are a professional social media ghostwriter. You write crisp, useful posts that read like a human wrote them.'
         : mode === 'learning'
-        ? 'You are a learning-focused ghostwriter. Share new knowledge, surprising facts, or actionable lessons that help founders and developers grow.'
-        : 'You are a senior X (Twitter) ghostwriter for a technical founder who builds multiple startups, ships fast, and speaks plainly.\n\n',
+        ? 'You are a learning-focused ghostwriter. You share fresh takeaways in plain, human language.'
+        : 'You are a senior ghostwriter for social media who writes like a real person, not a bot.\n',
+    
+      // Output format
       'OUTPUT FORMAT (HARD CONSTRAINTS)\n',
       `- Return JSON ONLY: {"tweets":[{"text":"..."}]}\n`,
-      `- Exactly COUNT items; each item is a single tweet (<=${textLimit} chars).\n`,
-      '- 1–2 sentences max. No hashtags, no links, no mentions, no quote marks, no numbered lists, no emojis.\n\n',
-      'AUDIENCE & VOICE\n',
-      '- Audience: developers, indie makers, technical founders, startup operators.\n',
-      '- Voice: direct, specific, slightly contrarian, practical, builder energy. Never fluffy or motivational.\n',
-      '- Assume the author codes (React/Next.js, Supabase, AWS, Postgres), ships MVPs, measures, iterates.\n\n',
-      'QUALITY BAR (PASS THE “SWEAT” TEST)\n',
-      '- Specific: include at least one concrete detail (tools, numbers, constraints, trade-offs, failure mode).\n',
-      '- Weird: avoid consensus phrasing; add a sharp angle or unexpected contrast.\n',
-      '- Empirical: refer to a cause/effect (“did X, saw Y”) or a falsifiable claim.\n',
-      '- Actionable: a tiny “do this / avoid that” or a pointed question that elicits useful replies.\n',
-      '- Tension: highlight a trade-off or a choice (speed vs polish, product vs distribution, etc.).\n\n',
-      'STRICT CONTENT RULES\n',
-      '- Banned: leverage, synergy, grind, crush it, game-changer, journey, consistency is key, build in public, hustle, thought leader, optimize to infinity, AI will replace everything.\n',
-      '- No generic “keep going”, “stay consistent”, or empty motivation.\n',
-      '- Do not fabricate metrics, logos, or names. If specifics are missing, use realistic software constraints (timeouts, p95 latency, cache misses, cold starts, index scans, etc.).\n',
-      '- Language: match the user input language; default to English.\n\n',
-      'USE OF CONTEXT (WHEN YOUTUBE TRANSCRIPT IS PRESENT)\n',
-      '- Extract 3–6 concrete facts first (frameworks, APIs, errors, trade-offs, numbers, quotes). Use at least one fact per tweet.\n',
-      '- Prefer conflict points, failed assumptions, counterintuitive lessons, or design/API limitations.\n\n',
-      'MODE SHAPES (CHOOSE TONE/PATTERN BASED ON MODE)\n',
-      '- professional → actionable insight, tip, or lesson for founders/developers.\n',
-      '- learning → share a new learning, surprising fact, or actionable lesson.\n',
-      '- reaction → sharp take or pushback on a common belief; 1–2 punchy lines.\n',
-      '- relatable → first-person micro-confession with a practical takeaway.\n',
-      '- listicle → one compact line with 3 fragments separated by em dashes (—) or dots · (not numbers).\n',
-      '- question → single high-signal, actionable, or popular question that invites practitioners to answer with examples, constraints, or code.\n',
-      '- routine → a tiny repeatable habit with context and payoff.\n\n',
-      'GOOD EXAMPLES (do not copy)\n',
-      '- question: How do you validate a startup idea?\n',
-      '- question: What is the fastest way to ship a new product?\n',
-      '- question: How do you find your first users?\n',
-      '- question: What is the best way to get feedback on an MVP?\n',
-      '- question: How do you avoid overengineering early?\n',
-      '- learning: A new way to validate startup ideas using customer interviews.\n',
-      '- learning: How to use rapid prototyping to test product-market fit.\n',
-      '- learning: Lessons learned from launching a SaaS in 30 days.\n',
-      '- learning: The importance of distribution over product perfection.\n',
-      '- learning: How to use user feedback to iterate quickly.\n',
-      '- professional: The best founders ship before they’re ready, then iterate.\n',
-      '- professional: If you’re not embarrassed by v1, you shipped too late.\n',
-      '- professional: Most MVPs fail because they try to do too much.\n',
-      '- professional: Distribution is more important than features.\n',
-      '- professional: The best feedback comes from real users, not friends.\n',
-      '- professional: Speed is a feature.\n',
-      '- professional: Constraints drive creativity.\n',
-      '- professional: The best products solve boring problems.\n',
-      '- professional: Don’t optimize for scale before you have users.\n',
-      '- professional: The best way to learn is to ship and iterate.\n',
-      '- professional: Don’t build for everyone; build for someone.\n',
-      '- professional: The best products are opinionated.\n',
-      '- professional: Don’t be afraid to delete features.\n',
-      '- professional: The best founders are relentless about feedback.\n',
-      '- professional: Don’t be afraid to launch ugly.\n',
-      '- professional: The best products are simple.\n',
-      '- professional: Don’t be afraid to say no.\n',
-      '- professional: The best products are built by small teams.\n',
-      '- professional: Don’t be afraid to pivot.\n',
-      '- professional: The best products are built for yourself.\n',
-      '- professional: Don’t be afraid to charge early.\n',
-      '- professional: The best products are built in public.\n',
-      '- professional: Don’t be afraid to ask for help.\n',
-      '- professional: The best products are built with love.\n',
-      '- professional: Don’t be afraid to fail.\n',
-      '- professional: The best products are built by people who care.\n',
-      '- professional: Don’t be afraid to start over.\n',
-      '- professional: The best products are built by people who listen.\n',
-      '- professional: Don’t be afraid to experiment.\n',
-      '- professional: The best products are built by people who learn.\n',
-      '- professional: Don’t be afraid to try new things.\n',
-      '- professional: The best products are built by people who share.\n',
-      '- professional: Don’t be afraid to ask questions.\n',
-      '- professional: The best products are built by people who teach.\n',
-      '- professional: Don’t be afraid to give back.\n',
-      '- professional: The best products are built by people who care about users.\n',
-      '- professional: Don’t be afraid to build for yourself.\n',
-      '- professional: The best products are built by people who solve their own problems.\n',
-      '- professional: Don’t be afraid to build for a niche.\n',
-      '- professional: The best products are built by people who focus.\n',
-      '- professional: Don’t be afraid to build for fun.\n',
-      '- professional: The best products are built by people who enjoy the process.\n',
-      '- professional: Don’t be afraid to build for the long term.\n',
-      '- professional: The best products are built by people who care about quality.\n',
-      '- professional: Don’t be afraid to build for impact.\n',
-      '- professional: The best products are built by people who care about results.\n',
-      '- professional: Don’t be afraid to build for change.\n',
-      '- professional: The best products are built by people who care about making a difference.\n',
-      '- professional: Don’t be afraid to build for the future.\n',
-      '- professional: The best products are built by people who care about the world.\n',
-      '- professional: Don’t be afraid to build for yourself.'
-    ].join('');
+      `- Exactly COUNT items; each item is a single post (<=${textLimit} chars).\n`,
+      '- 1–2 sentences max. No hashtags, no links, no mentions, no quote marks, no lists, no emojis.\n\n',
+    
+      // Voice & audience (human)
+      'VOICE & STYLE\n',
+      '- Human, conversational, and direct. Use contractions (don’t, can’t), vary sentence length, sometimes add a short aside in parentheses.\n',
+      '- Prefer first person (“I”) or second person (“you”) when natural. Avoid corporate tone and slogans.\n',
+      '- Show, don’t tell. Concrete details over abstractions.\n\n',
+    
+      // Quality bar
+      'QUALITY BAR\n',
+      '- Specific: include a concrete detail (tool, term, number, date, failure mode, quote paraphrase).\n',
+      '- Grounded: if transcript context is present, each post MUST clearly reference at least one fact from it.\n',
+      '- Actionable: include a tiny “do this / avoid that” or a sharp observation.\n',
+      '- No filler motivation or clichés.\n\n',
+    
+      // Strict rules
+      'STRICT RULES\n',
+      '- Banned words/phrases: leverage, synergy, grind, crush it, game-changer, journey, consistency is key, thought leader, build in public.\n',
+      '- Never say “the transcript,” “the video,” or describe your own process. Just write the post.\n',
+      '- Do not fabricate names, metrics, or quotes.\n',
+      `- Language: match the input language; default to English.\n\n`,
+    
+      // Mode shapes (kept, but phrased humanly)
+      'MODE SHAPES\n',
+      '- professional → one clear insight or tactic.\n',
+      '- learning → share a new learning or surprising takeaway.\n',
+      '- reaction → sharp take/pushback on a common belief.\n',
+      '- relatable → first-person micro-confession + tiny lesson.\n',
+      '- listicle → a single line with 2–3 fragments split by em dashes — not numbers.\n',
+      '- question → one high-signal question that invites examples and constraints.\n',
+      '- routine → a tiny repeatable habit with context and payoff.\n',
+    ].join('')
+    
 
     // ---------- New user prompt ----------
     let userPrompt;
     if (context) {
       userPrompt = [
-        `You just watched this YouTube video. Here are the main points from the transcript:`,
-        context,
+        'You have transcript text from a YouTube video below.',
+        'First, silently extract 4–8 concrete facts (frameworks/APIs, terms used, metrics, dates, named constraints, short quote fragments) — do NOT output them.',
+        `Then write exactly ${count} short posts (max ${textLimit} chars each) that clearly draw on those facts.`,
+        'Rules:',
+        '1) Each post must include at least ONE explicit concrete detail from the transcript (a term, API, number, named person, date, or paraphrased quote).',
+        '2) Write like a human: natural cadence, small asides, no stiff “corporate” phrasing.',
+        '3) No hashtags, links, mentions, lists, or emojis. 1–2 sentences per post.',
+        '4) Do not mention “the video” or “the transcript.” Do not explain your process.',
+        '5) Vary angle and rhythm across posts.',
         '',
-        `Write ${count} short, practical, and real posts (max ${textLimit} characters each) inspired by the transcript above.`,
-        'Each post should be a complete thought, not a list, and should sound like something a real person would share on social media.',
-        'Avoid generic advice, avoid buzzwords, and don’t repeat the transcript verbatim. Use your own words, be specific, and keep it natural.',
-        'No hashtags, no links, no mentions, no emojis, no numbered lists, no quote marks.',
-        'If the transcript is about failure, focus on real lessons, honest reflections, or questions people might actually ask after watching.',
-        'If you can, make each post a little different in style or focus.'
-      ].join('\n');
+        'Transcript:',
+        context,
+      ].join('\n')
     } else {
       userPrompt = [
-        `Write ${count} short, practical, and real posts (max ${textLimit} characters each) about this topic:`,
+        `Write exactly ${count} short posts (max ${textLimit} chars each) about this topic:`,
         topic,
         '',
-        'Each post should be a complete thought, not a list, and should sound like something a real person would share on social media.',
-        'Avoid generic advice, avoid buzzwords, and don’t repeat the topic verbatim. Use your own words, be specific, and keep it natural.',
-        'No hashtags, no links, no mentions, no emojis, no numbered lists, no quote marks.',
-        'If you can, make each post a little different in style or focus.'
-      ].join('\n');
+        'Write like a human (conversational, specific, no fluff).',
+        'Each post should contain at least one concrete detail (term, number, example, constraint).',
+        'No hashtags, links, mentions, lists, or emojis. 1–2 sentences per post.',
+        'Vary angle and rhythm across posts.',
+      ].join('\n')
     }
+    
 
     const excludeBullets = exclude.length ? exclude.map((t) => `• ${t}`).join('\n') : ''
 
